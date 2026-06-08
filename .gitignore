@@ -29,3 +29,7 @@ downloads/rawpy/
 
 # Temp files
 page_*.txt
+
+# Work/output directories
+work_dirs/
+vis_output/
