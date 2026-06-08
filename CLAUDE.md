@@ -79,3 +79,134 @@ Configs are in `configs/LOD/`:
 - `COCOmetric/` — Uses COCO-style evaluation.
 
 Base configs reference `configs/_base_/schedules/schedule_1x.py` and `configs/_base_/default_runtime.py`.
+
+---
+
+## Paper Core Concepts: Dark-ISP
+
+**Source**: "Dark-ISP: Enhancing RAW Image Processing for Low-Light Object Detection", Fudan University, arXiv:2509.09183v1 (Sep 2025)
+
+### Problem & Motivation
+
+- Low-light object detection: conventional RGB pipeline loses information during ISP (bit-depth reduction, noise amplification, dynamic range compression).
+- RAW (Bayer RGGB) images preserve richer photon-level information, camera metadata (ISO, WB, CCM, exposure time), and superior dynamic range.
+- Existing RAW-based methods either: (a) quantize to 8-bit RAW-RGB (lossy), (b) use complex ISP parameter search (expensive), or (c) require auxiliary normal-light RGB (impractical).
+
+### Dark-ISP Pipeline (3 Components)
+
+#### 1. Linear Component — Dynamic Linear Mapping (`ISP_version='v2'`, in `Matrix_Predictor`)
+
+Deconstructs traditional ISP linear operations into a single learnable matrix `P ∈ ℝ³ˣ⁴`:
+
+```
+I' = P · I    where P = C · B · W
+```
+
+- **W** (White Balance): diagonal matrix ∈ ℝ⁴ˣ⁴
+- **B** (Binning): sparse matrix ∈ ℝ³ˣ⁴, merges 4 Bayer channels → 3 RGB channels (green channels averaged)
+- **C** (Color Correction Matrix/CCM): ∈ ℝ³ˣ³
+
+Enhanced with **Local-Global Attention**:
+- Local branch: pixel-level features `F_l` → `P_l ∈ ℝ³ˣ⁴ˣᴴˣᵂ` (per-pixel adjustments)
+- Global branch: image-level features `F_g` (after 16× pooling) → `P_g ∈ ℝ³ˣ⁴` (global adjustments)
+- Final: `P' = P_l + P_g + P` (broadcast + skip connection)
+
+Implemented in `noise_predictor.py` → `Matrix_Predictor.forward()`:
+- Local stream: 5 conv blocks (lc_block1-5) with InstanceNorm + GELU
+- Global stream: 5 GaussianConv2d blocks (gl_block1-5) with AvgPool2d(16)
+- Cross-attention (`FA`): local features attend to camera parameter matrix
+- Global attention: camera params as Q, pooled features as K/V → 12-dim global adjustment
+
+#### 2. Nonlinear Component — Polynomial Tone Mapping (`Color_Level_Process`)
+
+Instead of a black-box CNN, uses **8th-order non-convex polynomial bases** with strong physical interpretability:
+
+```
+F(x) = Σₖ₌₀⁸ Cₖ(i,j) · fₖ(x)
+```
+
+where `f₀(x)=0`, and each `fₖ(x)` (k≥1) is a polynomial of order k passing through (0,0) and (1,1).
+
+Key property: these bases are **non-convex** — derivative is large near x→0 (stretch dark regions), small near x→1 (compress bright regions). This physically models the tone-mapping needed in low-light.
+
+Implemented in `utils.py` → `Tayler_res()`:
+- 8 basis functions applied per RGB channel independently
+- Network (`Color_Level_Process`) predicts 24 coefficient maps (3 channels × 8 bases) via softmax
+- Skip connection preserves gradient flow: `output = input + Tayler_res(input, coefficients)`
+- Parameters: only 0.136 MB
+
+#### 3. Self-Boost Regularization (`mat_loss2`)
+
+Promotes synergy between linear and nonlinear components:
+
+```
+L_sb = Σ ||1 - cos(p'_i, p̃_i)||
+```
+
+where:
+- `p'_i` = row vectors of learned linear matrix P'
+- `p̃_i` = row vectors of approximate linear matrix P̃ = U · Iᵀ · (I · Iᵀ)⁻¹
+- U = output of nonlinear component (used as pseudo-target)
+
+The loss aligns the **direction** (not magnitude) of corresponding row vectors, avoiding premature convergence. Multiplied by λ=0.01 (in code: 0.05).
+
+### Experimental Results
+
+| Dataset | Backbone | Dark-ISP mAP | Best Competitor |
+|---------|----------|-------------|-----------------|
+| LOD (Canon 5D IV) | ResNet-18 | 64.9 | 63.6 (default ISP) |
+| LOD | ResNet-50 | **70.4** | 67.9 (LIS) |
+| NOD Sony | R-50 | **31.5** | 30.3 (FeatEnHancer) |
+| NOD Nikon | R-50 | **29.9** | 28.8 (FeatEnHancer) |
+| SynCOCO | R-50 | **23.1** | 22.4 (FeatEnHancer) |
+
+Ablation on LOD R-50: Linear only 66.6 → +Nonlinear 68.7 → +Self-Boost **70.4**
+
+### Key Insight: Structural Information Preservation
+
+The nonlinear polynomial bases are designed to **stretch dark regions while compressing bright regions**. This means:
+- Weak gradients and edges in dark areas (e.g., 0.01→0.02) get amplified (e.g., 0.02→0.06 after nonlinear mapping)
+- Structural information that would normally be lost in ISP denoising survives
+- The output RGB retains richer edge/contour information than conventional ISP
+
+---
+
+## Research Direction: Structure-Aware Backbone Enhancement
+
+> *Goal: exploit the structural information preserved by Dark-ISP by inserting structure-sensitive convolution kernels into ResNet.*
+
+### Rationale
+- Dark-ISP preserves fine edges/gradients in dark regions via nonlinear tone mapping
+- But the standard ResNet stem (7×7 conv, stride=2, ImageNet-pretrained) expects natural-light gradient distributions
+- Standard convolution kernels are not optimized for the "dark-stretched" gradient patterns output by Dark-ISP
+
+### Safe Implementation Strategy (non-breaking)
+
+Add a new `model="Structure"` option to `Dark_ResNet` — all existing configs (`model="our"`, etc.) remain **unchanged**.
+
+```python
+# dark_resnet.py, in __init__:
+elif self.model == "Structure":
+    self.structure_module = StructureAwareBlock(stem_channels)
+
+# In forward(), after ISP but before stem:
+if self.model == "Structure":
+    x_l = self.structure_module(x_l)
+```
+
+### Candidate Module Designs
+
+1. **Gradient-Aware Stem (lightweight, ~0.02MB)**: Fixed Sobel kernels extract x/y gradients per channel → learnable fusion with original RGB → residual enhancement before stem.
+
+2. **Octave Convolution in Early Bottlenecks**: High-frequency channel preserves fine edges, low-frequency channel handles semantic content — naturally suited for Dark-ISP's dark-stretched outputs.
+
+3. **Deformable Convolution in Layer1/2**: Allows convolution sampling grid to adapt to fragmented edges (common in low-light where noise interrupts contours). Framework already supports via `dcn`/`stage_with_dcn` config.
+
+4. **Gradient Attention Plugin**: Plug into existing Bottleneck's `after_conv2` position via the `plugins` mechanism — compute gradient magnitude of feature maps, generate spatial attention weights.
+
+### Git Workflow
+- Remote: `git@github.com:Hostarain/Project-DISP.git` (SSH via port 443)
+- Branch: `main`
+- Baseline config: `R_Net_denoise_50.py` (model="our", ISP_version='v2') → 70.4 mAP
+- New config: `R_Net_Structure_50.py` (model="Structure", ISP_version='v2')
+- To verify: compare mAP between the two configs with identical training settings
