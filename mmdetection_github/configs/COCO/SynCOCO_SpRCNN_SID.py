@@ -1,6 +1,6 @@
 _base_ = [
-    '/home1/guojs/codes/Dark-ISP/mmdetection_github/configs/_base_/schedules/schedule_1x.py', 
-    '/home1/guojs/codes/Dark-ISP/mmdetection_github/configs/_base_/default_runtime.py',
+    '../_base_/schedules/schedule_1x.py', 
+    '../_base_/default_runtime.py',
 ]
 num_stages = 6
 num_proposals = 100
@@ -100,7 +100,7 @@ model = dict(
 
 # dataset settings
 dataset_type = 'CocoDataset'
-data_root = '/public/home/guojs/data/COCO/coco/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 backend_args = None
 

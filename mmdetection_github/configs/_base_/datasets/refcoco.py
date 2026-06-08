@@ -1,6 +1,6 @@
 # dataset settings
 dataset_type = 'RefCocoDataset'
-data_root = 'data/coco/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 backend_args = None
 

@@ -14,12 +14,12 @@ import torchvision
 from multiprocessing import Pool
 from data_preparation.raw_utils import metainfo
 
-raw_path = r'/public/home/guojs/data/LOD/RAW_dark' # Dark RAW image directory
-clean_path = r'/public/home/guojs/data/LOD/RAW_normal' # Normal RAW image directory
+raw_path = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest' # Dark RAW image directory
+clean_path = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest' # Normal RAW image directory
 
-out_path = r'/public/home/guojs/data/LOD/RAW_dark_denoised' # RGB format saved path
+out_path = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest' # RGB format saved path
 
-save_folder = r'/public/home/guojs/data/LOD/RAW_dark_denoised_npz' # RAW npz files saved path
+save_folder = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest' # RAW npz files saved path
 
 def apply_wb_ccm(bayer_images, wbs, ccms): # 应用颜色校正矩阵
     """""Applies white balance to a batch of Bayer images."""""

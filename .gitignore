@@ -1,0 +1,31 @@
+# Build artifacts
+build/
+*.so
+*.o
+*.pyd
+*.pyc
+__pycache__/
+
+# IDE
+.vscode/
+.idea/
+
+# Dataset (large files)
+dataset/
+*.npz
+*.CR2
+*.ARW
+*.NEF
+*.raw
+
+# Checkpoints
+checkpoints/
+*.pth
+
+# Downloads
+downloads/LibRaw-*/
+downloads/libraw_install/
+downloads/rawpy/
+
+# Temp files
+page_*.txt

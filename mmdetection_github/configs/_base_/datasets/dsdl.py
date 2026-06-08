@@ -1,5 +1,5 @@
 dataset_type = 'DSDLDetDataset'
-data_root = 'path to dataset folder'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 train_ann = 'path to train yaml file'
 val_ann = 'path to val yaml file'
 

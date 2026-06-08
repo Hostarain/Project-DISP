@@ -1,0 +1,4 @@
+exifread
+easydict
+pandas
+tabulate

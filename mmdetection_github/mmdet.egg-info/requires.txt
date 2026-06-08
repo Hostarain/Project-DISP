@@ -16,7 +16,6 @@ fairscale
 imagecorruptions
 scikit-learn
 matplotlib
-numpy
 pycocotools
 scipy
 shapely

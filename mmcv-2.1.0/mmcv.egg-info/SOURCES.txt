@@ -668,3 +668,5 @@ mmcv/visualization/color.py
 mmcv/visualization/image.py
 mmcv/visualization/optflow.py
 requirements/runtime.txt
+tests/test_arraymisc.py
+tests/test_visualization.py

@@ -1,12 +1,12 @@
 # dataset settings
 dataset_type = 'VOCDataset'
-data_root = 'data/VOCdevkit/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 # Example to use different file client
 # Method 1: simply set the data root and let the file I/O module
 # automatically Infer from prefix (not support LMDB and Memcache yet)
 
-# data_root = 's3://openmmlab/datasets/detection/segmentation/VOCdevkit/'
+# data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 # Method 2: Use `backend_args`, `file_client_args` in versions before 3.0.0rc6
 # backend_args = dict(
@@ -54,7 +54,7 @@ train_dataloader = dict(
                     type=dataset_type,
                     data_root=data_root,
                     ann_file='VOC2007/ImageSets/Main/trainval.txt',
-                    data_prefix=dict(sub_data_root='VOC2007/'),
+                    data_prefix=dict(sub_data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'),
                     filter_cfg=dict(
                         filter_empty_gt=True, min_size=32, bbox_min_size=32),
                     pipeline=train_pipeline,
@@ -63,7 +63,7 @@ train_dataloader = dict(
                     type=dataset_type,
                     data_root=data_root,
                     ann_file='VOC2012/ImageSets/Main/trainval.txt',
-                    data_prefix=dict(sub_data_root='VOC2012/'),
+                    data_prefix=dict(sub_data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'),
                     filter_cfg=dict(
                         filter_empty_gt=True, min_size=32, bbox_min_size=32),
                     pipeline=train_pipeline,
@@ -80,7 +80,7 @@ val_dataloader = dict(
         type=dataset_type,
         data_root=data_root,
         ann_file='VOC2007/ImageSets/Main/test.txt',
-        data_prefix=dict(sub_data_root='VOC2007/'),
+        data_prefix=dict(sub_data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'),
         test_mode=True,
         pipeline=test_pipeline,
         backend_args=backend_args))

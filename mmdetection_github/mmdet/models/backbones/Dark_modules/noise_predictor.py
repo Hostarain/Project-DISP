@@ -260,11 +260,11 @@ class LUT3D(nn.Module):
         self.n_ranks = n_ranks
 
         dim = n_vertices
-        self.weight_r = torch.ones(3,dim,dim,dim-1, dtype=torch.float).cuda()
+        self.weight_r = torch.ones(3,dim,dim,dim-1, dtype=torch.float)
         self.weight_r[:,:,:,(0,dim-2)] *= 2.0
-        self.weight_g = torch.ones(3,dim,dim-1,dim, dtype=torch.float).cuda()
+        self.weight_g = torch.ones(3,dim,dim-1,dim, dtype=torch.float)
         self.weight_g[:,:,(0,dim-2),:] *= 2.0
-        self.weight_b = torch.ones(3,dim-1,dim,dim, dtype=torch.float).cuda()
+        self.weight_b = torch.ones(3,dim-1,dim,dim, dtype=torch.float)
         self.weight_b[:,(0,dim-2),:,:] *= 2.0
 
         self.init_weights()

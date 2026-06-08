@@ -1,12 +1,12 @@
 # dataset settings
 dataset_type = 'CocoDataset'
-data_root = 'data/coco/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 # Example to use different file client
 # Method 1: simply set the data root and let the file I/O module
 # automatically infer from prefix (not support LMDB and Memcache yet)
 
-# data_root = 's3://openmmlab/datasets/detection/coco/'
+# data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 # Method 2: Use `backend_args`, `file_client_args` in versions before 3.0.0rc6
 # backend_args = dict(
@@ -110,8 +110,7 @@ test_pipeline = [
 
 batch_size = 5
 num_workers = 5
-# There are two common semi-supervised learning settings on the coco datasetï¼š
-# (1) Divide the train2017 into labeled and unlabeled datasets
+# There are two common semi-supervised learning settings on the coco datasetï¼?# (1) Divide the train2017 into labeled and unlabeled datasets
 # by a fixed percentage, such as 1%, 2%, 5% and 10%.
 # The format of labeled_ann_file and unlabeled_ann_file are
 # instances_train2017.{fold}@{percent}.json, and

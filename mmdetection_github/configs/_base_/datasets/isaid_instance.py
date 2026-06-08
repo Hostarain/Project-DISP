@@ -1,6 +1,6 @@
 # dataset settings
 dataset_type = 'iSAIDDataset'
-data_root = 'data/iSAID/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 backend_args = None
 
 # Please see  `projects/iSAID/README.md` for data preparation

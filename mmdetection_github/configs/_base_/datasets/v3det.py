@@ -1,6 +1,6 @@
 # dataset settings
 dataset_type = 'V3DetDataset'
-data_root = 'data/V3Det/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 backend_args = None
 

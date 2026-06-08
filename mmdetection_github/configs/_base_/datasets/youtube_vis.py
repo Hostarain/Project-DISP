@@ -1,5 +1,5 @@
 dataset_type = 'YouTubeVISDataset'
-data_root = 'data/youtube_vis_2019/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 dataset_version = data_root[-5:-1]  # 2019 or 2021
 
 backend_args = None

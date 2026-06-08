@@ -1,6 +1,6 @@
 _base_ = [
-    '/home1/guojs/codes/Dark-ISP/mmdetection_github/configs/_base_/schedules/schedule_1x.py', 
-    '/home1/guojs/codes/Dark-ISP/mmdetection_github/configs/_base_/default_runtime.py',
+    '../../_base_/schedules/schedule_1x.py', 
+    '../../_base_/default_runtime.py',
 ]
 
 
@@ -82,8 +82,8 @@ model = dict(
 
 
 dataset_type = 'LOD_RAWDAtaset'
-data_root = '/public/home/guojs/data/LOD'
-# data_root = '/public/home/guojs/data/LOD/MiniLOD'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
+# data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 backend_args = None
 
@@ -110,17 +110,17 @@ test_pipeline = [
         meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
                    'scale_factor', 'iso', 'wb', 'white_level', 'ratio',
                     'black_level', 'ccm', 'raw_pattern', 'exp_time'),
-        # bayer_substitute = '/public/home/guojs/data/LOD_BMVC2021/RGB_normal/',
+        # bayer_substitute = '../dataset/RGB_normal/',
         # suffix = '.JPG'
-        # bayer_substitute = '/public/home/guojs/data/LOD_BMVC2021/RAW_dark/',
+        # bayer_substitute = '../dataset/RAW_dark/',
         # suffix = '.png'
     )
 ]      
 
 train_dataloader = dict(
-    batch_size=4,
-    num_workers=8,
-    persistent_workers=True,
+    batch_size=2,
+    num_workers=0,
+    persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=True),
     batch_sampler=dict(type='AspectRatioBatchSampler'),
     dataset=dict(
@@ -139,7 +139,7 @@ train_dataloader = dict(
                     ann_file='trainval/train.txt',  # training set 
                     img_subdir = 'RAW_dark_npz',
                     ann_subdir = 'RGB-dark-Annotations',
-                    data_prefix=dict(sub_data_root=''),
+                    data_prefix=dict(sub_data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'),
                     filter_cfg=dict(
                         filter_empty_gt=True, min_size=32, bbox_min_size=32),
                     pipeline=train_pipeline,
@@ -157,8 +157,8 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     batch_size=1,
-    num_workers=2,
-    persistent_workers=True,
+    num_workers=0,
+    persistent_workers=False,
     drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -167,7 +167,7 @@ val_dataloader = dict(
         ann_file='trainval/val.txt',    # validation set
         img_subdir = 'RAW_dark_npz',
         ann_subdir = 'RGB-dark-Annotations',
-        data_prefix=dict(sub_data_root=''),
+        data_prefix=dict(sub_data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'),
         test_mode=True,
         pipeline=test_pipeline,
         backend_args=backend_args)
@@ -221,3 +221,10 @@ train_cfg = dict(max_epochs=max_epochs)  # the real epoch is 5*2 = 10
 # base_batch_size = (8 GPUs) x (16 samples per GPU)
 auto_scale_lr = dict(base_batch_size=16)
 find_unused_parameters = True
+
+# Windows does not support 'fork', override to 'spawn'
+env_cfg = dict(
+    cudnn_benchmark=False,
+    mp_cfg=dict(mp_start_method='spawn', opencv_num_threads=0),
+    dist_cfg=dict(backend='nccl'),
+)

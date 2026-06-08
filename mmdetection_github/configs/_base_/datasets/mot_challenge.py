@@ -1,6 +1,6 @@
 # dataset settings
 dataset_type = 'MOTChallengeDataset'
-data_root = 'data/MOT17/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 img_scale = (1088, 1088)
 
 backend_args = None

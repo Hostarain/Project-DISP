@@ -2,6 +2,9 @@
 import argparse
 import os
 import os.path as osp
+import warnings
+
+warnings.filterwarnings('ignore', message='.*TorchScript.*functional optimizers.*')
 
 from mmengine.config import Config, DictAction
 from mmengine.registry import RUNNERS

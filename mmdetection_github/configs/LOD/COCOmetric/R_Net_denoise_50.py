@@ -1,6 +1,6 @@
 _base_ = [
-    '/home1/guojs/codes/Dark-ISP/mmdetection_github/configs/_base_/schedules/schedule_1x.py', 
-    '/home1/guojs/codes/Dark-ISP/mmdetection_github/configs/_base_/default_runtime.py',
+    '../../_base_/schedules/schedule_1x.py', 
+    '../../_base_/default_runtime.py',
 ]
 
 
@@ -82,8 +82,8 @@ model = dict(
 
 
 dataset_type = 'LODDataset'
-data_root = '/public/home/guojs/data/LOD/'
-# data_root = '/public/home/guojs/data/LOD/MiniLOD'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
+# data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 backend_args = None
 
@@ -134,7 +134,7 @@ train_dataloader = dict(
                 #     ann_file='trainval/train.txt',  # training set
                 #     img_subdir = 'RAW_dark_npz',
                 #     ann_subdir = 'RGB-dark-Annotations',
-                #     data_prefix=dict(sub_data_root=''),
+                #     data_prefix=dict(sub_data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'),
                 #     filter_cfg=dict(
                 #         filter_empty_gt=True, min_size=32, bbox_min_size=32),
                 #     pipeline=train_pipeline,
@@ -162,7 +162,7 @@ val_dataloader = dict(
     #     ann_file='trainval/val.txt',    # validation set
     #     img_subdir = 'RAW_dark_npz',
     #     ann_subdir = 'RGB-dark-Annotations',
-    #     data_prefix=dict(sub_data_root=''),
+    #     data_prefix=dict(sub_data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'),
     #     test_mode=True,
     #     pipeline=test_pipeline,
     #     backend_args=backend_args)

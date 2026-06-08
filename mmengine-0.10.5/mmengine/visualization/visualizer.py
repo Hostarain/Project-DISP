@@ -175,9 +175,6 @@ class Visualizer(ManagerMixin):
         if not is_seq_of(vis_backends, (dict, BaseVisBackend)):
             raise TypeError('vis_backends must be a list of dicts or a list '
                             'of BaseBackend instances')
-        if save_dir is not None:
-            save_dir = osp.join(save_dir, 'vis_data')
-
         for vis_backend in vis_backends:  # type: ignore
             name = None
             if isinstance(vis_backend, dict):

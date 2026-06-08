@@ -8,6 +8,10 @@ Create the conda virtual environment with python version 3.8 and CUDA version 10
   conda create -n dark-isp python=3.8
   conda activate dark-isp
 ```
+## 📦 Install PyTorch (CUDA)
+```bash
+  pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+```
 ## 📦 Install the requirement
 ```bash
   cd mmdetection_github
@@ -31,48 +35,30 @@ cd ../mmdetection_github
 pip install -v -e .
 ```
 #### 4.LibRaw and rawpy
-Unzip them:
-```bash
-cd ../downloads
-unzip LibRaw-0.21.1.zip
-unzip rawpy.zip
-```
-##### If you have `sudo` permission:
-```bash
-cd LibRaw-0.21.1
-./configure
-make
-sudo make install
-cd ../rawpy
-RAWPY_USE_SYSTEM_LIBRAW=1 pip install -e .
-```
-##### Otherwise:
-```
-cd LibRaw-0.21.1
-./configure --prefix=/path/to/your/directory 
-make 
-make install
-```
-Export environment variables:
-```bash
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/path/to/your/directory/lib/
-export PKG_CONFIG_PATH=/path/to/your/directory/lib/pkgconfig:$PKG_CONFIG_PATH
-```
-Install rawpy:
-```bash
-cd ../rawpy
-RAWPY_USE_SYSTEM_LIBRAW=1 pip install -e .
-```
+
+> Windows 下编译安装步骤详见：[`downloads/LibRaw_Windows_Build_Guide.md`](downloads/LibRaw_Windows_Build_Guide.md)
 ## 🗄 Data Peparation
 The LOD dataset and orignal RAW images are uploaded [here](https://pan.baidu.com/s/1Ek-q_9DaSLceLD4dhOYQAA?pwd=2025) (Extraction code：2025).
 
-To accelerate training, it is necessary to preprocess RAW format files into npz files. You need to replace the corresponding directory name in `LOD_RAW_preprocess.py`
+To accelerate training, it is necessary to preprocess RAW format files into npz files. The processed npz file was also uploaded to the cloud disk.
+
+### Path Configuration
+Run the setup script to configure dataset paths:
+```powershell
+powershell -ExecutionPolicy Bypass -File setup_paths.ps1 <your_dataset_dir>
+```
+Example:
+```powershell
+powershell -ExecutionPolicy Bypass -File setup_paths.ps1 E:\my_data\LOD
+```
+> This updates all config files, preprocessing scripts, and test scripts with your dataset path.
+
+### Preprocessing (optional)
+If you downloaded RAW files instead of preprocessed npz:
 ```python
 python mmdetection_github/LOD_RAW_preprocess.py
 ```
-The processed npz file was also uploaded to the cloud disk.
 ## 🤖 Training and Evaluation
-Modify the path information in the config files.
 ```python
 python mmdetection_github/tools/train.py mmdetection_github/configs/LOD/VOCmetric/R_Net_denoise_50.py
 ```

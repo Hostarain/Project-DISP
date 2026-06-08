@@ -1,6 +1,6 @@
 # dataset settings
 dataset_type = 'ReIDDataset'
-data_root = 'data/MOT17/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 backend_args = None
 # data pipeline

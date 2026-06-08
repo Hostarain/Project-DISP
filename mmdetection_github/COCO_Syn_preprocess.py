@@ -16,14 +16,14 @@ from data_preparation.raw_utils import metainfo
 from mmdet.datasets.transforms.noisemodel.unprocess import *
 from pycocotools.coco import COCO
 
-# data_dir = r'/public/home/guojs/data/COCO/coco'
+# data_dir = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest'
 # annotation_file = os.path.join(data_dir, 'annotations', 'instances_train2017.json')
 #   # 注释文件路径
 
-data_path = r'/public/home/guojs/data/COCO/coco/val2017'
-out_path = r'/public/home/guojs/data/COCO/coco/val2017_SynRAW'
+data_path = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest'
+out_path = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest'
 
-save_folder = r'/public/home/guojs/data/COCO/coco/val2017_npz'
+save_folder = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest'
 # out_path_oe = r'/data/unagi0/cui_data/light_dataset/PASCAL_RAW/PASCALRAW/demosaic_oe'
 
 def _sample_params():
@@ -33,25 +33,25 @@ def _sample_params():
         Q_step = 1  # 量化层级
 
         profiles = ['Profile-1']
-        saturation_level = 16383 - 512  # 相机标定值，白点减去黑电平值
+        saturation_level = 16383 - 512  # 相机标定值，白点减去黑电平�?
 
         # 调取相机标定参数
         camera_params = {}
-        param_dir = '/home1/guojs/codes/Dark-ISP/mmdetection_github/mmdet/datasets/transforms/noisemodel/camera_params'
+        param_dir = 'E:/!yan/SoftWare/code/Dark-ISP/RAWTest'
         camera_params[camera] = np.load(join(
             param_dir, camera+'_params.npy'), allow_pickle=True).item()  # 加载指定相机标定参数
         camera_params = camera_params[camera]
         Kmin = camera_params['Kmin']
         Kmax = camera_params['Kmax']
 
-        # 抽取标定参数中的随机数
+        # 抽取标定参数中的随机�?
         G_shape = np.random.choice(camera_params['G_shape'])
         ind = np.random.randint(0, camera_params['color_bias'].shape[0])
         color_bias = camera_params['color_bias'][ind, :]
         profile = np.random.choice(profiles)
         camera_params = camera_params[profile]
 
-        # 初始化noisemodel模型中的随机数
+        # 初始化noisemodel模型中的随机�?
         log_K = np.random.uniform(low=np.log(Kmin), high=np.log(Kmax))
         log_g_scale = np.random.standard_normal() * camera_params['g_scale']['sigma'] * 1 +\
             camera_params['g_scale']['slope'] * \
@@ -208,7 +208,7 @@ def worker(path, out_path):
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     H, W, _ = image.shape
     image = cv2.resize(image, (W  * 2, H  * 2))
-    image = np.array(image).astype(np.float32) / 255.  # 像素值归一化
+    image = np.array(image).astype(np.float32) / 255.  # 像素值归一�?
     raw, ccm, wb = unprocess(image)
     noisy_raw, wl, ratio = add_noise(raw.copy())  # 添加噪声
     noisy_raw = noisy_raw * _dark
@@ -266,12 +266,12 @@ if __name__ == '__main__':
     #     image_id = set(image_ids) | set(image_id)
     
     # img_list = []
-    # # 获取图像的完整路径
+    # # 获取图像的完整路�?
     # for img_id in image_ids:
     #     img_info = coco.imgs[img_id]
     #     img_path = os.path.join(data_dir, 'train2017', img_info['file_name'])  # 图像路径
     #     img_list.append(img_path)
-    # # 获取指定类别的图像 ID
+    # # 获取指定类别的图�?ID
 
     pool = Pool(50)
     pbar = tqdm(total=len(img_list), unit='image', desc='Extract')
@@ -283,7 +283,7 @@ if __name__ == '__main__':
     pbar.close()
         
 
-        # im = raw_low * int((saturation - black) / uint12_max） + black
+        # im = raw_low * int((saturation - black) / uint12_max�?+ black
         # im = im.numpy()[0]  # 4 2251 3372
         # im = depack_raw_bayer(im, raw_pattern) 
         # H, W = im.shape # 4502 6744

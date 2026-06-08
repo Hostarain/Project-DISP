@@ -92,7 +92,7 @@ def readimg(path):
     white_level = np.array(raw.camera_white_level_per_channel).reshape(4, 1, 1)
     im = pack_raw_bayer(raw_vis, raw_pattern)
     img_name, extension = osp.splitext(osp.basename(path))
-    clean_path = f'/public/home/guojs/data/LOD/RAW_normal/{str(int(img_name)-1)}.CR2'
+    clean_path = f'E:/!yan/SoftWare/code/Dark-ISP/RAWTest'
     iso_gt, exp_time_gt = metainfo(clean_path)
     ratio = (iso_gt * exp_time_gt)/(iso * exp_time)
     

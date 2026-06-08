@@ -14,11 +14,11 @@ import torchvision
 from multiprocessing import Pool
 from data_preparation.raw_utils import metainfo
 
-raw_path = r'/public/home/guojs/data/NOD/Nikon'
+raw_path = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest'
 
-out_path = r'/public/home/guojs/data/NOD/Nikon_RGB'
+out_path = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest'
 
-save_folder = r'/public/home/guojs/data/NOD/Nikon_npz'
+save_folder = r'E:/!yan/SoftWare/code/Dark-ISP/RAWTest'
 # out_path_oe = r'/data/unagi0/cui_data/light_dataset/PASCAL_RAW/PASCALRAW/demosaic_oe'
 
 def apply_wb_ccm(bayer_images, wbs, ccms): # 应用颜色校正矩阵
@@ -220,7 +220,7 @@ if __name__ == '__main__':
     pbar.close()
         
 
-        # im = raw_low * int((saturation - black) / uint12_max） + black
+        # im = raw_low * int((saturation - black) / uint12_max�?+ black
         # im = im.numpy()[0]  # 4 2251 3372
         # im = depack_raw_bayer(im, raw_pattern) 
         # H, W = im.shape # 4502 6744

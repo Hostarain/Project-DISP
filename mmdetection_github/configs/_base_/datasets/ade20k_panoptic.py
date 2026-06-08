@@ -1,6 +1,6 @@
 # dataset settings
 dataset_type = 'ADE20KPanopticDataset'
-data_root = 'data/ADEChallengeData2016/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 backend_args = None
 

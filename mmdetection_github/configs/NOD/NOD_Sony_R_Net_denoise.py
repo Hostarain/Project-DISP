@@ -1,6 +1,6 @@
 _base_ = [
-    '/home1/guojs/codes/Dark-ISP/mmdetection_github/configs/_base_/schedules/schedule_1x.py', 
-    '/home1/guojs/codes/Dark-ISP/mmdetection_github/configs/_base_/default_runtime.py',
+    '../_base_/schedules/schedule_1x.py', 
+    '../_base_/default_runtime.py',
 ]
 
 
@@ -81,7 +81,7 @@ model = dict(
 
 # dataset settings
 dataset_type = 'NODDataset'
-data_root = '/public/home/guojs/data/NOD/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 backend_args = None
 
@@ -107,7 +107,7 @@ test_pipeline = [
         meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
                    'scale_factor', 'iso', 'wb', 'white_level', 'ratio',
                     'black_level', 'ccm', 'raw_pattern', 'exp_time'),
-        bayer_substitute = '/public/home/guojs/data/NOD/Sony_RGB/'
+        bayer_substitute = '../dataset/NOD/Sony_RGB/'
         )
 ]
 

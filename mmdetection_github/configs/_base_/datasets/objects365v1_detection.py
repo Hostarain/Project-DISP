@@ -1,12 +1,12 @@
 # dataset settings
 dataset_type = 'Objects365V1Dataset'
-data_root = 'data/Objects365/Obj365_v1/'
+data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 # Example to use different file client
 # Method 1: simply set the data root and let the file I/O module
 # automatically infer from prefix (not support LMDB and Memcache yet)
 
-# data_root = 's3://openmmlab/datasets/detection/coco/'
+# data_root = 'E:/!yan/SoftWare/code/Dark-ISP/Dark-ISP/dataset/RAWTest'
 
 # Method 2: Use `backend_args`, `file_client_args` in versions before 3.0.0rc6
 # backend_args = dict(
