@@ -171,42 +171,78 @@ The nonlinear polynomial bases are designed to **stretch dark regions while comp
 
 ---
 
-## Research Direction: Structure-Aware Backbone Enhancement
+## Research Direction: Structural Response Operators for Dark-ISP Output
 
-> *Goal: exploit the structural information preserved by Dark-ISP by inserting structure-sensitive convolution kernels into ResNet.*
+> *Goal: exploit the structural information preserved by Dark-ISP by designing structural response operators between Dark-ISP output and ResNet stem.*
 
 ### Rationale
-- Dark-ISP preserves fine edges/gradients in dark regions via nonlinear tone mapping
-- But the standard ResNet stem (7×7 conv, stride=2, ImageNet-pretrained) expects natural-light gradient distributions
-- Standard convolution kernels are not optimized for the "dark-stretched" gradient patterns output by Dark-ISP
+- Dark-ISP's non-convex polynomial bases stretch dark regions, amplifying weak edges BUT also amplifying noise
+- Standard ResNet stem (7×7 conv, stride=2, ImageNet-pretrained) expects natural-light gradient distributions
+- A structural response operator should learn to distinguish "real edges" from "amplified noise" in Dark-ISP output
 
-### Safe Implementation Strategy (non-breaking)
+### Baseline (user's local config)
+- Config: `R_Net_DarkISP_18.py` (model="our", ISP_version='v2', depth=18)
+- Result: **61.9% mAP** on LOD (VOC 11-point)
+- Training: batch_size=2, RepeatDataset×3, 15 epochs, SGD lr=0.001
+- GPU: RTX 2060 6GB, Windows, conda env `dark-isp`
 
-Add a new `model="Structure"` option to `Dark_ResNet` — all existing configs (`model="our"`, etc.) remain **unchanged**.
+### Experiment v1: `StructureAwareBlock` (model="Structure")
 
-```python
-# dark_resnet.py, in __init__:
-elif self.model == "Structure":
-    self.structure_module = StructureAwareBlock(stem_channels)
+**Implemented in**: `Dark_modules/structure_aware.py` | Config: `R_Net_Structure_18.py`
 
-# In forward(), after ISP but before stem:
-if self.model == "Structure":
-    x_l = self.structure_module(x_l)
-```
+**Design**: Fixed Sobel x/y kernels (groups=3) → 6ch gradient → small attention head (6→16→3) → spatial weight α → `output = x + x * α * 0.1`
 
-### Candidate Module Designs
+**Rationale**: Give ResNet an explicit gradient-based hint about edge locations.
 
-1. **Gradient-Aware Stem (lightweight, ~0.02MB)**: Fixed Sobel kernels extract x/y gradients per channel → learnable fusion with original RGB → residual enhancement before stem.
+**Result**: Best **61.23%** mAP (epoch 13), essentially identical to baseline (61.9%). **No measurable improvement.**
 
-2. **Octave Convolution in Early Bottlenecks**: High-frequency channel preserves fine edges, low-frequency channel handles semantic content — naturally suited for Dark-ISP's dark-stretched outputs.
+**Root cause analysis**:
+1. Sobel assumes clean step edges — Dark-ISP amplifies noise alongside edges, Sobel cannot distinguish them
+2. Fixed 2-kernel response (|Gx|, |Gy|) loses directional structure information
+3. scale=0.1 may be too conservative — 5% enhancement signal drowned by BN+ReLU
+4. Attention head input (6ch) is too impoverished to learn fine spatial decisions
 
-3. **Deformable Convolution in Layer1/2**: Allows convolution sampling grid to adapt to fragmented edges (common in low-light where noise interrupts contours). Framework already supports via `dcn`/`stage_with_dcn` config.
+### Experiment v2: `LearnedStructureAttention` (model="LSA")
 
-4. **Gradient Attention Plugin**: Plug into existing Bottleneck's `after_conv2` position via the `plugins` mechanism — compute gradient magnitude of feature maps, generate spatial attention weights.
+**Implemented in**: `Dark_modules/learned_structure_attention.py` | Config: `R_Net_LSA_18.py`
+
+**Design**: 12 learnable 3×3 differential kernels (groups=3, 4 kernels per RGB channel) → 12ch structural response → same attention head (12→16→3) → spatial weight α → `output = x + x * α * gamma`
+
+**Key differences from v1**:
+| | v1 (Structure) | v2 (LSA) |
+|------|:---:|:---:|
+| Structural response | 2 fixed Sobel kernels | 12 learnable differential kernels |
+| Kernel init | Sobel x/y (frozen) | 4 types per channel: Sobel x/y, center diff x/y |
+| Enhancement strength | scale=0.1 (fixed) | gamma (learnable, init 0.1, unconstrained) |
+| Input to attention head | 6ch | 12ch |
+| Parameters | 1,334 | 2,307 |
+
+**Design philosophy**:
+- NOT "replacing Sobel" — exploring whether learnable differential kernels can better model Dark-ISP's specific gradient distribution
+- Kernels initialised with differential priors but free to evolve during training
+- gamma unconstrained (may become negative → general residual modulator, not pure enhancement)
+- Attention head kept identical to v1 to isolate the effect of the structural response operator
+- No identity kernels, zero-mean regularization, or complex attention in v1 — minimal viable version
+
+**Status**: NOT YET TRAINED. Awaiting training run.
+
+### Implementation Pattern (both v1 and v2)
+
+All modules follow the same non-breaking pattern:
+1. New `.py` file in `Dark_modules/`
+2. Import added to `dark_resnet.py`
+3. `elif self.model == "XXX"` branch in both `__init__` and `forward`
+4. New config copies `R_Net_DarkISP_18.py`, only changes `model` field
+5. **All existing configs and code paths untouched**
+
+### Further Candidate Directions (not yet implemented)
+- **Octave Convolution** in early ResNet blocks (explicit high/low frequency separation)
+- **Deformable Convolution** in layer1/2 (adapt sampling grid to fragmented low-light edges)
+- **Feature-level gradient attention** via Bottleneck plugins (only applicable to R-50, not R-18)
+- **Zero-mean regularization** on learned kernels if they degenerate toward non-differential patterns
 
 ### Git Workflow
-- Remote: `git@github.com:Hostarain/Project-DISP.git` (SSH via port 443)
+- Remote: `git@github.com:Hostarain/Project-DISP.git` (SSH via port 443, `ssh.github.com`)
 - Branch: `main`
-- Baseline config: `R_Net_denoise_50.py` (model="our", ISP_version='v2') → 70.4 mAP
-- New config: `R_Net_Structure_50.py` (model="Structure", ISP_version='v2')
-- To verify: compare mAP between the two configs with identical training settings
+- SSH config at `~/.ssh/config`
+- Conda env: `dark-isp` (CUDA_LAUNCH_BLOCKING=1 auto-set via `etc/conda/activate.d/env_vars.bat`)
