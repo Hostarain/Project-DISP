@@ -33,6 +33,7 @@ from .Dark_modules.utils import color_transform, default_ISP, cosine_similarity
 from .Dark_modules.lut import lut_transform
 from .Dark_modules.noise_predictor import LUT3D,  Matrix_Predictor, Color_Level_Process, Zero_DCE, NILUT
 from .Dark_modules.structure_aware import StructureAwareBlock
+from .Dark_modules.learned_structure_attention import LearnedStructureAttention
 
 
 class BasicBlock(BaseModule):
@@ -469,6 +470,8 @@ class Dark_ResNet(BaseModule):
             self.pre_processor = ImageProcessor(cfg)
         elif self.model == "Structure":
             self.structure_block = StructureAwareBlock(in_ch=3, mid_ch=16, scale=0.1)
+        elif self.model == "LSA":
+            self.lsa_block = LearnedStructureAttention(in_ch=3, K=12, mid_ch=16)
 
         self._make_stem_layer(in_channels, stem_channels)
         self.fea_c_s = fea_c_s
@@ -663,6 +666,8 @@ class Dark_ResNet(BaseModule):
             x_l = self.pre_processor(x_l)
         elif self.model == "Structure":
             x_l = self.structure_block(x_l)
+        elif self.model == "LSA":
+            x_l = self.lsa_block(x_l)
         """Forward function."""
         if self.deep_stem:  # False
             x = self.stem(x_l)
