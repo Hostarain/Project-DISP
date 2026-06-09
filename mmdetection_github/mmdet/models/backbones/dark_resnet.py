@@ -756,4 +756,8 @@ class Dark_ResNet(BaseModule):
             for m in self.modules():
                 # trick: eval have effect on BatchNorm only
                 if isinstance(m, _BatchNorm):
+                    # keep learnable-structure BN in training mode so its
+                    # running stats can adapt to the differential responses
+                    if hasattr(self, 'lsa_block') and m in set(self.lsa_block.modules()):
+                        continue
                     m.eval()
