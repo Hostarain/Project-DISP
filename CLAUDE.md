@@ -224,7 +224,36 @@ The nonlinear polynomial bases are designed to **stretch dark regions while comp
 - Attention head kept identical to v1 to isolate the effect of the structural response operator
 - No identity kernels, zero-mean regularization, or complex attention in v1 — minimal viable version
 
-**Status**: NOT YET TRAINED. Awaiting training run.
+**Status**: TRAINED (in progress).  See results below.
+
+### v2 Training Results & Issues
+
+**Bug discovered (BN freeze)**: `norm_eval=True` in `Dark_ResNet.train()` froze *all* BN layers in eval mode, including LSA's attention head BN.  With differential kernel outputs (positive+negative, varying magnitude), the initial running stats (0 mean, 1 var) caused Sigmoid collapse → epoch 1 mAP = 2.2%.
+
+**Fix** (commit `7cc2392`): skip LSA BN layers in the norm_eval loop:
+```python
+if hasattr(self, 'lsa_block') and m in set(self.lsa_block.modules()):
+    continue
+```
+
+**After fix**, training restarted as `work_dirs/2026_06_09_newLSA_resNet18/`.
+
+**Epoch-by-epoch mAP (LSA vs baselines)**:
+
+| Epoch | Baseline | v1 (Structure) | v2 (LSA) | Notes |
+|:---:|:---:|:---:|:---:|------|
+| 1 | — | 20.7% | **30.1%** | LSA leads early |
+| 2 | — | 37.0% | **45.0%** | |
+| 3 | — | 47.6% | **48.9%** | |
+| 4 | 52.1% | 52.1% | 49.6% | LSA converges slower |
+| 5 | 57.5% | 55.8% | 55.8% | |
+| 6 | 60.1% | 59.5% | 58.2% | |
+| **7** | **58.2%** | **59.3%** | **63.0%** | 🔥 LSA breaks out |
+| 8-15 | — | — | TBD | Training in progress |
+
+**Key observation**: LSA is *slow to converge* (epochs 4-6 lag behind) but *breaks through* at epoch 7 (63.0%).  This already surpasses baseline best (61.9%) and v1 best (61.2%).  The 12 learnable kernels appear to need time to specialise before delivering gains.
+
+**Training speed impact**: v2 adds ~414M FLOPs (12ch conv vs 6ch in v1), increasing per-iter time from ~2.3s to ~2.9s on RTX 2060.
 
 ### Implementation Pattern (both v1 and v2)
 
