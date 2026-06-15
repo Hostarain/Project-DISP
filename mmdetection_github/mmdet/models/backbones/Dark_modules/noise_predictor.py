@@ -7,8 +7,19 @@ import os
 from .utils import gaussian_kernel, Tayler_res
 
 class Matrix_Predictor(nn.Module):
-    def __init__(self, dim=32, num_heads=1, qkv_bias=True, qk_scale=None, down_drop=0.2, attn_drop=0., proj_drop=0., head_drop=0., data='NOD'):
+    def __init__(self, dim=32, num_heads=1, qkv_bias=True, qk_scale=None, down_drop=0.2, attn_drop=0., proj_drop=0., head_drop=0., data='NOD', use_grad_guide=False):
         super().__init__()
+
+        self.use_grad_guide = use_grad_guide
+
+        # ---------- optional gradient guidance on 4ch RAW ----------
+        if use_grad_guide:
+            # groups=4 → each RAW channel (R,G,G,B) gets 2 directional kernels
+            self.grad_extract = nn.Conv2d(4, 8, 3, 1, 1, groups=4, bias=False)
+            self._init_raw_grad_kernels()
+            # fuse 8ch gradient features to dim for both local & global streams
+            self.grad_fuse_local = nn.Conv2d(8, dim, 1, 1, 0, bias=True)
+            self.grad_fuse_global = nn.Conv2d(8, dim, 1, 1, 0, bias=True)
 
         self.lc_block1 = nn.Sequential(
             # nn.Conv2d(4, dim, kernel_size=3, stride=1, padding=1, bias=False),
@@ -105,15 +116,38 @@ class Matrix_Predictor(nn.Module):
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
+    def _init_raw_grad_kernels(self):
+        """Initialise learnable differential kernels on 4ch RAW with Sobel priors."""
+        sobel_x = torch.tensor([[-1.,  0.,  1.],
+                                [-2.,  0.,  2.],
+                                [-1.,  0.,  1.]]) / 4.
+        sobel_y = torch.tensor([[-1., -2., -1.],
+                                [ 0.,  0.,  0.],
+                                [ 1.,  2.,  1.]]) / 4.
+        with torch.no_grad():
+            for g in range(4):  # 4 RAW channels (R, G, G, B)
+                self.grad_extract.weight.data[g*2+0, 0].copy_(sobel_x)
+                self.grad_extract.weight.data[g*2+1, 0].copy_(sobel_y)
+
     def forward(self, x, mat):
 
+        # ---------- gradient-guided structural modulation ----------
+        if self.use_grad_guide:
+            grad = self.grad_extract(x)              # [B, 8, H, W]
+            grad_local = self.grad_fuse_local(grad)  # [B, dim, H, W]
+            grad_global = self.grad_fuse_global(grad)
+
         l_x1 = self.lc_block1(x)
+        if self.use_grad_guide:
+            l_x1 = l_x1 + grad_local                # inject into local stream
         l_x2 = self.lc_block2(l_x1)
         l_x3 = self.lc_block3(l_x2)
         l_x4 = self.lc_block4(l_x3)
         d_x1 = self.lc_block5(l_x4+l_x3+l_x2+l_x1)
 
         g_x1 = self.gl_block1(x)
+        if self.use_grad_guide:
+            g_x1 = g_x1 + grad_global               # inject into global stream
         g_x2 = self.gl_block2(g_x1)
         g_x3 = self.gl_block2(g_x2)
         g_x4 = self.gl_block2(g_x3)
@@ -303,25 +337,72 @@ class LUT3D(nn.Module):
 
 
 class Color_Level_Process(nn.Module):
-    def __init__(self, number_f=32):
+    """
+    Nonlinear tone-mapping component of Dark-ISP.
+
+    Predicts per-pixel coefficient maps for 8 non-convex polynomial bases
+    (3 RGB channels × 8 bases = 24 output channels).  The polynomial bases
+    stretch dark regions and compress bright regions, preserving structural
+    information that would be lost in conventional ISP.
+
+    If ``use_grad_guide=True``, a lightweight gradient extractor provides
+    structural awareness to the coefficient predictor, enabling the network
+    to distinguish edge pixels (deserving aggressive tone-mapping) from
+    flat noisy regions (deserving conservative treatment).
+    """
+    def __init__(self, number_f=32, use_grad_guide: bool = False):
         super().__init__()
-        self.e_conv1 = nn.Conv2d(3,number_f,3,1,1,bias=True) 
-        self.e_conv2 = nn.Conv2d(number_f,number_f,3,1,1,bias=True) 
-        self.e_conv3 = nn.Conv2d(number_f,number_f,3,1,1,bias=True)  
-        self.e_conv4 = nn.Conv2d(number_f,number_f,3,1,1,bias=True) 
-        self.e_conv5 = nn.Conv2d(number_f,24,3,1,1,bias=True) 
+        self.use_grad_guide = use_grad_guide
+
+        self.e_conv1 = nn.Conv2d(3,number_f,3,1,1,bias=True)
+        self.e_conv2 = nn.Conv2d(number_f,number_f,3,1,1,bias=True)
+        self.e_conv3 = nn.Conv2d(number_f,number_f,3,1,1,bias=True)
+        self.e_conv4 = nn.Conv2d(number_f,number_f,3,1,1,bias=True)
+
+        if use_grad_guide:
+            # Lightweight gradient extractor: 3×3 group conv initialised with
+            # mixed differential priors (Sobel + centre-difference kernels).
+            # groups=3 → each RGB channel gets its own 2 directional kernels.
+            self.grad_extract = nn.Conv2d(3, 6, 3, 1, 1, groups=3, bias=False)
+            self._init_grad_kernels()
+            # Fuse gradient features (6ch) into the coefficient predictor
+            # stream without changing the main pathway's channel count.
+            self.grad_fuse = nn.Conv2d(6, number_f, 1, 1, 0, bias=True)
+
+        self.e_conv5 = nn.Conv2d(number_f,24,3,1,1,bias=True)
         self.relu = nn.ReLU(inplace=True)
         self.tanh = nn.Tanh()
-
         self.drop = nn.Dropout(0.1)
-        
 
+    # ------------------------------------------------------------------
+    def _init_grad_kernels(self):
+        """Initialise with Sobel-x, Sobel-y per RGB channel."""
+        sobel_x = torch.tensor([[-1.,  0.,  1.],
+                                [-2.,  0.,  2.],
+                                [-1.,  0.,  1.]]) / 4.
+        sobel_y = torch.tensor([[-1., -2., -1.],
+                                [ 0.,  0.,  0.],
+                                [ 1.,  2.,  1.]]) / 4.
+        with torch.no_grad():
+            for g in range(3):  # 3 RGB channels
+                self.grad_extract.weight.data[g*2+0, 0].copy_(sobel_x)
+                self.grad_extract.weight.data[g*2+1, 0].copy_(sobel_y)
+
+    # ------------------------------------------------------------------
     def forward(self, imgs):
         x1 = self.relu(self.e_conv1(imgs))
         x2 = self.relu(self.e_conv2(x1))
         x3 = self.relu(self.e_conv3(x2))
         x4 = self.relu(self.e_conv4(x3))
-        x_r = self.e_conv5(x1+x2+x3+x4)
+
+        feat = x1 + x2 + x3 + x4
+
+        if self.use_grad_guide:
+            grad = self.grad_extract(imgs)        # [B, 6, H, W]
+            grad_feat = self.relu(self.grad_fuse(grad))  # [B, 32, H, W]
+            feat = feat + grad_feat               # structure-guided modulation
+
+        x_r = self.e_conv5(feat)
         # x_r =  self.drop(x_r)
         # x_r = self.tanh(x_r)
         r1, r2, r3 = torch.split(x_r, 8, dim=1)
@@ -329,18 +410,8 @@ class Color_Level_Process(nn.Module):
         r2 = r2.softmax(dim=1)
         r3 = r3.softmax(dim=1)
 
-        # bais = self.bais(x_r)
-        # outs = embed_nonlinear_channel(imgs, [r1, r2, r3])
-        # imgs = (imgs + outs).clip(0, 1)
-
-        # outs = embed_nonlinear_channel_nores(imgs, [r1, r2, r3])
-        # imgs = outs.clip(0, 1)
-        # imgs = (imgs + outs).clip(0, 1)
-        
-
         outs = Tayler_res(imgs, [r1, r2, r3])
         imgs = (imgs + outs).clip(0, 1)
-        # imgs = (imgs + outs + bais).clip(0, 1)
 
         return imgs
 
