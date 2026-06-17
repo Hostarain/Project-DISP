@@ -17,18 +17,21 @@ Dark-ISP is a research project implementing the paper "Dark-ISP: Enhancing RAW I
 
 ## Commands
 
+**IMPORTANT: All commands MUST be run from `mmdetection_github/` directory.**
+This ensures checkpoints land in `mmdetection_github/checkpoints/` (relative path `out_dir='checkpoints'` in default_runtime.py).
+
 ```bash
 # Preprocess RAW (.CR2) files to .npz training data
-python mmdetection_github/LOD_RAW_preprocess.py
+python LOD_RAW_preprocess.py
 
 # Train
-python mmdetection_github/tools/train.py <config_file>
+python tools/train.py <config_file>
 
 # Distributed training
-bash mmdetection_github/tools/dist_train.sh <config_file> <num_gpus>
+bash tools/dist_train.sh <config_file> <num_gpus>
 
 # Test/evaluation
-python mmdetection_github/tools/test.py <config_file> <checkpoint_path>
+python tools/test.py <config_file> <checkpoint_path>
 ```
 
 Config files and checkpoints must have their paths updated to match the local environment before use.
@@ -171,104 +174,93 @@ The nonlinear polynomial bases are designed to **stretch dark regions while comp
 
 ---
 
-## Research Direction: Structural Response Operators for Dark-ISP Output
+## Phase 2: Gradient-Guided Nonlinear Correction (GGNC)
 
-> *Goal: exploit the structural information preserved by Dark-ISP by designing structural response operators between Dark-ISP output and ResNet stem.*
+> *Goal: inject structural (gradient) awareness into Dark-ISP to preserve edge information that benefits downstream detection.*
 
-### Rationale
-- Dark-ISP's non-convex polynomial bases stretch dark regions, amplifying weak edges BUT also amplifying noise
-- Standard ResNet stem (7×7 conv, stride=2, ImageNet-pretrained) expects natural-light gradient distributions
-- A structural response operator should learn to distinguish "real edges" from "amplified noise" in Dark-ISP output
+### Final Ablation Results (LOD VOC 11-point, ResNet-18)
 
-### Baseline (user's local config)
-- Config: `R_Net_DarkISP_18.py` (model="our", ISP_version='v2', depth=18)
-- Result: **61.9% mAP** on LOD (VOC 11-point)
-- Training: batch_size=2, RepeatDataset×3, 15 epochs, SGD lr=0.001
-- GPU: RTX 2060 6GB, Windows, conda env `dark-isp`
+| Method | Best mAP | Δ Baseline | Conclusion |
+|---|---|---|---|
+| Dark-ISP (Baseline) | 61.90% | — | — |
+| + StructureAware (fixed Sobel) | 61.23% | -0.67% | ❌ No benefit |
+| + LSA (learnable kernels, post-ISP) | 60.83% | -1.07% | ❌ Degrades |
+| + Linear GGNC (gradient on CCM) | 62.68% | +0.78% | △ Marginal |
+| + **Nonlinear GGNC** (gradient on tone mapping) | **65.27%** | **+3.37%** | ✅ **Effective** |
+| + Both (Linear + Nonlinear) | 65.23% | +3.33% | ~ Nonlinear alone |
 
-### Experiment v1: `StructureAwareBlock` (model="Structure")
+**Key finding**: Gradient guidance only helps in the **nonlinear tone-mapping component** (`Color_Level_Process`). The linear CCM prediction (`Matrix_Predictor`) does not benefit from structure awareness — color correction is inherently a low-frequency operation where edge-level detail is irrelevant.
 
-**Implemented in**: `Dark_modules/structure_aware.py` | Config: `R_Net_Structure_18.py`
+### Cleanup (June 16, 2026)
 
-**Design**: Fixed Sobel x/y kernels (groups=3) → 6ch gradient → small attention head (6→16→3) → spatial weight α → `output = x + x * α * 0.1`
+Removed all failed/irrelevant experiments to focus on Nonlinear GGNC:
 
-**Rationale**: Give ResNet an explicit gradient-based hint about edge locations.
+- **Deleted configs**: `R_Net_GGNC_both`, `R_Net_GGNC_linear`, `R_Net_GGNC_LSA*`, `R_Net_LSA`, `R_Net_Structure`, `R_Net_Naive`
+- **Deleted modules**: `structure_aware.py`, `learned_structure_attention.py`
+- **Cleaned code**: removed `use_grad_guide_linear`, LSA/Structure/Naive model branches from `dark_resnet.py`; reverted `Matrix_Predictor`
+- **Kept configs**: `R_Net_DarkISP_18.py` (baseline), `R_Net_GGNC_nonlinear_18.py`
+- **Kept results**: `work_dirs/2026_06_04_DarkISP_ResNet18` (61.90%), `work_dirs/R_Net_GGNC_18` (65.27%)
 
-**Result**: Best **61.23%** mAP (epoch 13), essentially identical to baseline (61.9%). **No measurable improvement.**
+### Current GGNC Architecture (Nonlinear only)
 
-**Root cause analysis**:
-1. Sobel assumes clean step edges — Dark-ISP amplifies noise alongside edges, Sobel cannot distinguish them
-2. Fixed 2-kernel response (|Gx|, |Gy|) loses directional structure information
-3. scale=0.1 may be too conservative — 5% enhancement signal drowned by BN+ReLU
-4. Attention head input (6ch) is too impoverished to learn fine spatial decisions
-
-### Experiment v2: `LearnedStructureAttention` (model="LSA")
-
-**Implemented in**: `Dark_modules/learned_structure_attention.py` | Config: `R_Net_LSA_18.py`
-
-**Design**: 12 learnable 3×3 differential kernels (groups=3, 4 kernels per RGB channel) → 12ch structural response → same attention head (12→16→3) → spatial weight α → `output = x + x * α * gamma`
-
-**Key differences from v1**:
-| | v1 (Structure) | v2 (LSA) |
-|------|:---:|:---:|
-| Structural response | 2 fixed Sobel kernels | 12 learnable differential kernels |
-| Kernel init | Sobel x/y (frozen) | 4 types per channel: Sobel x/y, center diff x/y |
-| Enhancement strength | scale=0.1 (fixed) | gamma (learnable, init 0.1, unconstrained) |
-| Input to attention head | 6ch | 12ch |
-| Parameters | 1,334 | 2,307 |
-
-**Design philosophy**:
-- NOT "replacing Sobel" — exploring whether learnable differential kernels can better model Dark-ISP's specific gradient distribution
-- Kernels initialised with differential priors but free to evolve during training
-- gamma unconstrained (may become negative → general residual modulator, not pure enhancement)
-- Attention head kept identical to v1 to isolate the effect of the structural response operator
-- No identity kernels, zero-mean regularization, or complex attention in v1 — minimal viable version
-
-**Status**: TRAINED (in progress).  See results below.
-
-### v2 Training Results & Issues
-
-**Bug discovered (BN freeze)**: `norm_eval=True` in `Dark_ResNet.train()` froze *all* BN layers in eval mode, including LSA's attention head BN.  With differential kernel outputs (positive+negative, varying magnitude), the initial running stats (0 mean, 1 var) caused Sigmoid collapse → epoch 1 mAP = 2.2%.
-
-**Fix** (commit `7cc2392`): skip LSA BN layers in the norm_eval loop:
-```python
-if hasattr(self, 'lsa_block') and m in set(self.lsa_block.modules()):
-    continue
+```
+RAW (B,4,H,W)
+  │
+  ├─► Matrix_Predictor (no GGNC) → dmat → color_transform → x_g
+  │
+  └─► Color_Level_Process (WITH GGNC)
+        ├─ e_conv1~4 → feat [B, 32, H, W]
+        ├─ grad_extract (Sobel x/y, groups=3) → grad [B, 6, H, W]
+        ├─ grad_fuse (6→32) → grad_feat
+        ├─ feat = feat + grad_feat          ← structure modulation
+        └─ e_conv5 → 24 coeffs → Tayler_res → x_l
 ```
 
-**After fix**, training restarted as `work_dirs/2026_06_09_newLSA_resNet18/`.
+Current design is minimal: fixed 2-direction Sobel kernels, single injection point, no attention.
 
-**Epoch-by-epoch mAP (LSA vs baselines)**:
+---
 
-| Epoch | Baseline | v1 (Structure) | v2 (LSA) | Notes |
-|:---:|:---:|:---:|:---:|------|
-| 1 | — | 20.7% | **30.1%** | LSA leads early |
-| 2 | — | 37.0% | **45.0%** | |
-| 3 | — | 47.6% | **48.9%** | |
-| 4 | 52.1% | 52.1% | 49.6% | LSA converges slower |
-| 5 | 57.5% | 55.8% | 55.8% | |
-| 6 | 60.1% | 59.5% | 58.2% | |
-| **7** | **58.2%** | **59.3%** | **63.0%** | 🔥 LSA breaks out |
-| 8-15 | — | — | TBD | Training in progress |
+## TODO: GGNC v2 — Deepening Nonlinear GGNC
 
-**Key observation**: LSA is *slow to converge* (epochs 4-6 lag behind) but *breaks through* at epoch 7 (63.0%).  This already surpasses baseline best (61.9%) and v1 best (61.2%).  The 12 learnable kernels appear to need time to specialise before delivering gains.
+### Design Goals
 
-**Training speed impact**: v2 adds ~414M FLOPs (12ch conv vs 6ch in v1), increasing per-iter time from ~2.3s to ~2.9s on RTX 2060.
+Upgrade from fixed 2-kernel Sobel to a richer structural response operator **inside the ISP** (not post-ISP like LSA was).
 
-### Implementation Pattern (both v1 and v2)
+### Candidate Directions
 
-All modules follow the same non-breaking pattern:
-1. New `.py` file in `Dark_modules/`
-2. Import added to `dark_resnet.py`
-3. `elif self.model == "XXX"` branch in both `__init__` and `forward`
-4. New config copies `R_Net_DarkISP_18.py`, only changes `model` field
-5. **All existing configs and code paths untouched**
+#### Direction A: Learnable Multi-Kernel Differential Operator
+- Replace fixed Sobel x/y with K learnable 3×3 differential kernels (groups=3)
+- Initialize with diverse priors: Sobel x/y, Laplacian, center-diff x/y, diagonal gradients
+- Let kernels specialise during training for Dark-ISP's specific gradient distribution
+- **Inspired by LSA's kernel design, but placed inside Color_Level_Process instead of post-ISP**
 
-### Further Candidate Directions (not yet implemented)
-- **Octave Convolution** in early ResNet blocks (explicit high/low frequency separation)
-- **Deformable Convolution** in layer1/2 (adapt sampling grid to fragmented low-light edges)
-- **Feature-level gradient attention** via Bottleneck plugins (only applicable to R-50, not R-18)
-- **Zero-mean regularization** on learned kernels if they degenerate toward non-differential patterns
+#### Direction B: Multi-Scale Gradient Injection
+- Extract gradients at multiple resolutions (1×, ½×, ¼×)
+- Fuse with corresponding feature pyramid levels
+- Captures edges at different scales (fine texture vs object contours)
+
+#### Direction C: Content-Adaptive Gradient Weighting
+- Predict per-pixel gradient importance (similar to attention)
+- Dark regions → stronger gradient guidance (edges need more boost)
+- Bright regions → weaker guidance (edges already visible)
+- Could use a small attention head: grad → 3→1 → sigmoid → pixel-wise weight
+
+#### Direction D: Deeper Injection Points
+- Current: single injection after e_conv1~4 summation
+- Upgrade: inject at each of e_conv1~4 individually (multi-stage guidance)
+- Each stage learns what gradient information is relevant at that depth
+
+#### Direction E: Gradient + Frequency Decomposition
+- Combine spatial gradients with frequency-domain features
+- Low-freq: global tone adjustment; High-freq: edge enhancement
+- Could use learnable wavelet-like decomposition
+
+### Implementation Plan
+1. Choose 1-2 directions to try first (recommend: A + C)
+2. Modify `Color_Level_Process` in `noise_predictor.py`
+3. Add new `use_grad_guide_v2` flag (or reuse `use_grad_guide`)
+4. Create new config `R_Net_GGNC_v2_18.py`
+5. Run ablation vs current GGNC v1
 
 ### Git Workflow
 - Remote: `git@github.com:Hostarain/Project-DISP.git` (SSH via port 443, `ssh.github.com`)
