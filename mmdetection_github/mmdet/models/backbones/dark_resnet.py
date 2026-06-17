@@ -32,8 +32,6 @@ from .RAW_Adapter.model_adapter import Model_level_Adapeter, Merge_block
 from .Dark_modules.utils import color_transform, default_ISP, cosine_similarity
 from .Dark_modules.lut import lut_transform
 from .Dark_modules.noise_predictor import LUT3D,  Matrix_Predictor, Color_Level_Process, Zero_DCE, NILUT
-from .Dark_modules.structure_aware import StructureAwareBlock
-from .Dark_modules.learned_structure_attention import LearnedStructureAttention, ComputeMatchedBaseline
 
 
 class BasicBlock(BaseModule):
@@ -367,8 +365,7 @@ class Dark_ResNet(BaseModule):
                  model=None,
                  is_removedk=True,
                  ISP_version = 'v1',
-                 use_grad_guide = False,
-                 use_grad_guide_linear = False):
+                 use_grad_guide = False):
         super(Dark_ResNet, self).__init__(init_cfg)
         self.zero_init_residual = zero_init_residual
         if depth not in self.arch_settings:
@@ -438,7 +435,7 @@ class Dark_ResNet(BaseModule):
         self.version = ISP_version
         self.color_mapper = LUT3D(n_colors=3, n_vertices=17, n_ranks=3)
         self.gamma = nn.Parameter(torch.FloatTensor([2.2]), requires_grad=True)
-        self.params_predictor = Matrix_Predictor(attn_drop=0.1, proj_drop=0.1, head_drop=0.2, data='LOD', use_grad_guide=use_grad_guide_linear)
+        self.params_predictor = Matrix_Predictor(attn_drop=0.1, proj_drop=0.1, head_drop=0.2, data='LOD')
         self.nonlinear = Color_Level_Process(use_grad_guide=use_grad_guide)
         self.mlp = NILUT()
         self.nonlinear3 = Zero_DCE()
@@ -470,12 +467,6 @@ class Dark_ResNet(BaseModule):
             self.pre_processor = Adaptive_Module(in_ch=3, nf=16, gamma_range=[1.,4.])
         elif self.model == "IA_ISP":
             self.pre_processor = ImageProcessor(cfg)
-        elif self.model == "Structure":
-            self.structure_block = StructureAwareBlock(in_ch=3, mid_ch=16, scale=0.1)
-        elif self.model == "LSA":
-            self.lsa_block = LearnedStructureAttention(in_ch=3, K=12, mid_ch=16)
-        elif self.model == "Naive":
-            self.naive_block = ComputeMatchedBaseline(in_ch=3, mid_ch=24)
 
         self._make_stem_layer(in_channels, stem_channels)
         self.fea_c_s = fea_c_s
@@ -668,12 +659,6 @@ class Dark_ResNet(BaseModule):
             x_l = self.pre_processor(x_l)
         elif self.model == "IA_ISP":
             x_l = self.pre_processor(x_l)
-        elif self.model == "Structure":
-            x_l = self.structure_block(x_l)
-        elif self.model == "LSA":
-            x_l = self.lsa_block(x_l)
-        elif self.model == "Naive":
-            x_l = self.naive_block(x_l)
         """Forward function."""
         if self.deep_stem:  # False
             x = self.stem(x_l)
@@ -762,10 +747,4 @@ class Dark_ResNet(BaseModule):
             for m in self.modules():
                 # trick: eval have effect on BatchNorm only
                 if isinstance(m, _BatchNorm):
-                    # keep structural modules' BN in training mode so their
-                    # running stats can adapt to the module-specific responses
-                    if hasattr(self, 'lsa_block') and m in set(self.lsa_block.modules()):
-                        continue
-                    if hasattr(self, 'naive_block') and m in set(self.naive_block.modules()):
-                        continue
                     m.eval()

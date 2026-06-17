@@ -7,19 +7,8 @@ import os
 from .utils import gaussian_kernel, Tayler_res
 
 class Matrix_Predictor(nn.Module):
-    def __init__(self, dim=32, num_heads=1, qkv_bias=True, qk_scale=None, down_drop=0.2, attn_drop=0., proj_drop=0., head_drop=0., data='NOD', use_grad_guide=False):
+    def __init__(self, dim=32, num_heads=1, qkv_bias=True, qk_scale=None, down_drop=0.2, attn_drop=0., proj_drop=0., head_drop=0., data='NOD'):
         super().__init__()
-
-        self.use_grad_guide = use_grad_guide
-
-        # ---------- optional gradient guidance on 4ch RAW ----------
-        if use_grad_guide:
-            # groups=4 → each RAW channel (R,G,G,B) gets 2 directional kernels
-            self.grad_extract = nn.Conv2d(4, 8, 3, 1, 1, groups=4, bias=False)
-            self._init_raw_grad_kernels()
-            # fuse 8ch gradient features to dim for both local & global streams
-            self.grad_fuse_local = nn.Conv2d(8, dim, 1, 1, 0, bias=True)
-            self.grad_fuse_global = nn.Conv2d(8, dim, 1, 1, 0, bias=True)
 
         self.lc_block1 = nn.Sequential(
             # nn.Conv2d(4, dim, kernel_size=3, stride=1, padding=1, bias=False),
@@ -116,38 +105,15 @@ class Matrix_Predictor(nn.Module):
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
-    def _init_raw_grad_kernels(self):
-        """Initialise learnable differential kernels on 4ch RAW with Sobel priors."""
-        sobel_x = torch.tensor([[-1.,  0.,  1.],
-                                [-2.,  0.,  2.],
-                                [-1.,  0.,  1.]]) / 4.
-        sobel_y = torch.tensor([[-1., -2., -1.],
-                                [ 0.,  0.,  0.],
-                                [ 1.,  2.,  1.]]) / 4.
-        with torch.no_grad():
-            for g in range(4):  # 4 RAW channels (R, G, G, B)
-                self.grad_extract.weight.data[g*2+0, 0].copy_(sobel_x)
-                self.grad_extract.weight.data[g*2+1, 0].copy_(sobel_y)
-
     def forward(self, x, mat):
 
-        # ---------- gradient-guided structural modulation ----------
-        if self.use_grad_guide:
-            grad = self.grad_extract(x)              # [B, 8, H, W]
-            grad_local = self.grad_fuse_local(grad)  # [B, dim, H, W]
-            grad_global = self.grad_fuse_global(grad)
-
         l_x1 = self.lc_block1(x)
-        if self.use_grad_guide:
-            l_x1 = l_x1 + grad_local                # inject into local stream
         l_x2 = self.lc_block2(l_x1)
         l_x3 = self.lc_block3(l_x2)
         l_x4 = self.lc_block4(l_x3)
         d_x1 = self.lc_block5(l_x4+l_x3+l_x2+l_x1)
 
         g_x1 = self.gl_block1(x)
-        if self.use_grad_guide:
-            g_x1 = g_x1 + grad_global               # inject into global stream
         g_x2 = self.gl_block2(g_x1)
         g_x3 = self.gl_block2(g_x2)
         g_x4 = self.gl_block2(g_x3)
