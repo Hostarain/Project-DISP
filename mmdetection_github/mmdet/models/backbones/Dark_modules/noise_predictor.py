@@ -307,18 +307,23 @@ class Color_Level_Process(nn.Module):
     Nonlinear tone-mapping component of Dark-ISP.
 
     Predicts per-pixel coefficient maps for 8 non-convex polynomial bases
-    (3 RGB channels × 8 bases = 24 output channels).  The polynomial bases
+    (3 RGB channels x 8 bases = 24 output channels).  The polynomial bases
     stretch dark regions and compress bright regions, preserving structural
     information that would be lost in conventional ISP.
 
-    If ``use_grad_guide=True``, a lightweight gradient extractor provides
-    structural awareness to the coefficient predictor, enabling the network
-    to distinguish edge pixels (deserving aggressive tone-mapping) from
-    flat noisy regions (deserving conservative treatment).
+    Parameters
+    ----------
+    use_grad_guide : bool
+        Enable gradient-guided correction.
+    grad_guide_mode : str
+        'v1' — gradient injected at feature level (feat += grad_feat).
+        'v2' — gradient bypasses feature space, directly modulates logits.
     """
-    def __init__(self, number_f=32, use_grad_guide: bool = False):
+    def __init__(self, number_f=32, use_grad_guide: bool = False,
+                 grad_guide_mode: str = 'v1'):
         super().__init__()
         self.use_grad_guide = use_grad_guide
+        self.grad_guide_mode = grad_guide_mode
 
         self.e_conv1 = nn.Conv2d(3,number_f,3,1,1,bias=True)
         self.e_conv2 = nn.Conv2d(number_f,number_f,3,1,1,bias=True)
@@ -326,19 +331,24 @@ class Color_Level_Process(nn.Module):
         self.e_conv4 = nn.Conv2d(number_f,number_f,3,1,1,bias=True)
 
         if use_grad_guide:
-            # Lightweight gradient extractor: 3×3 group conv initialised with
-            # mixed differential priors (Sobel + centre-difference kernels).
-            # groups=3 → each RGB channel gets its own 2 directional kernels.
             self.grad_extract = nn.Conv2d(3, 6, 3, 1, 1, groups=3, bias=False)
             self._init_grad_kernels()
-            # Fuse gradient features (6ch) into the coefficient predictor
-            # stream without changing the main pathway's channel count.
-            self.grad_fuse = nn.Conv2d(6, number_f, 1, 1, 0, bias=True)
+
+            if grad_guide_mode == 'v1':
+                # v1: fuse gradient into 32d feature space (feat-level injection)
+                self.grad_fuse = nn.Conv2d(6, number_f, 1, 1, 0, bias=True)
+            elif grad_guide_mode == 'v2':
+                # v2: direct 6->24 logit modulation (decision-level injection)
+                self.grad_branch = nn.Sequential(
+                    nn.Conv2d(6, 24, 3, 1, 1, bias=True),
+                    nn.Tanh(),
+                )
+                self.grad_scale = nn.Parameter(torch.tensor(1.0))
+            else:
+                raise ValueError(f"Unknown grad_guide_mode: {grad_guide_mode}")
 
         self.e_conv5 = nn.Conv2d(number_f,24,3,1,1,bias=True)
         self.relu = nn.ReLU(inplace=True)
-        self.tanh = nn.Tanh()
-        self.drop = nn.Dropout(0.1)
 
     # ------------------------------------------------------------------
     def _init_grad_kernels(self):
@@ -364,13 +374,20 @@ class Color_Level_Process(nn.Module):
         feat = x1 + x2 + x3 + x4
 
         if self.use_grad_guide:
-            grad = self.grad_extract(imgs)        # [B, 6, H, W]
-            grad_feat = self.relu(self.grad_fuse(grad))  # [B, 32, H, W]
-            feat = feat + grad_feat               # structure-guided modulation
+            grad = self.grad_extract(imgs)            # [B, 6, H, W]
 
-        x_r = self.e_conv5(feat)
-        # x_r =  self.drop(x_r)
-        # x_r = self.tanh(x_r)
+            if self.grad_guide_mode == 'v1':
+                grad_feat = self.relu(self.grad_fuse(grad))  # [B, 32, H, W]
+                feat = feat + grad_feat               # feature-level injection
+            elif self.grad_guide_mode == 'v2':
+                delta = self.grad_branch(grad) * self.grad_scale  # [B, 24, H, W]
+                # injected after e_conv5 (direct logit modulation)
+
+        x_r = self.e_conv5(feat)                      # [B, 24, H, W]
+
+        if self.use_grad_guide and self.grad_guide_mode == 'v2':
+            x_r = x_r + delta
+
         r1, r2, r3 = torch.split(x_r, 8, dim=1)
         r1 = r1.softmax(dim=1)
         r2 = r2.softmax(dim=1)

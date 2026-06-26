@@ -25,7 +25,7 @@ model = dict(
         style='pytorch',
         model="our",              # Dark-ISP without extra backbone adapter
         ISP_version='v2',         # Full Dark-ISP pipeline (Linear + Nonlinear + Self-Boost)
-        use_grad_guide=True,      # Gradient-Guided Nonlinear Component (structure-aware tone mapping)
+        use_grad_guide=True,      # GGNC v1: gradient injected at feature level (feat += grad_feat)
         init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet18')),
     neck=dict(
         type='FPN',

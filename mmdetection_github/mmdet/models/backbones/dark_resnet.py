@@ -365,7 +365,10 @@ class Dark_ResNet(BaseModule):
                  model=None,
                  is_removedk=True,
                  ISP_version = 'v1',
-                 use_grad_guide = False):
+                 use_grad_guide = False,
+                 grad_guide_mode = 'v1',
+                 use_grad_reg = False,
+                 lambda_grad = 0.1):
         super(Dark_ResNet, self).__init__(init_cfg)
         self.zero_init_residual = zero_init_residual
         if depth not in self.arch_settings:
@@ -436,10 +439,24 @@ class Dark_ResNet(BaseModule):
         self.color_mapper = LUT3D(n_colors=3, n_vertices=17, n_ranks=3)
         self.gamma = nn.Parameter(torch.FloatTensor([2.2]), requires_grad=True)
         self.params_predictor = Matrix_Predictor(attn_drop=0.1, proj_drop=0.1, head_drop=0.2, data='LOD')
-        self.nonlinear = Color_Level_Process(use_grad_guide=use_grad_guide)
+        self.nonlinear = Color_Level_Process(use_grad_guide=use_grad_guide,
+                                                grad_guide_mode=grad_guide_mode)
         self.mlp = NILUT()
         self.nonlinear3 = Zero_DCE()
-        
+
+        self.use_grad_reg = use_grad_reg
+        self.lambda_grad = lambda_grad
+        # Pre-create Sobel kernels for grad_consistency_loss (frozen, no grad)
+        if use_grad_reg:
+            sx = torch.tensor([[-1.,  0.,  1.],
+                               [-2.,  0.,  2.],
+                               [-1.,  0.,  1.]]) / 4.
+            sy = torch.tensor([[-1., -2., -1.],
+                               [ 0.,  0.,  0.],
+                               [ 1.,  2.,  1.]]) / 4.
+            self.register_buffer('_sobel_x', sx.view(1, 1, 3, 3).repeat(3, 1, 1, 1))
+            self.register_buffer('_sobel_y', sy.view(1, 1, 3, 3).repeat(3, 1, 1, 1))
+
         self.model = model
         if self.model == "Raw-adapter":
             self.pre_encoder = Input_level_Adapeter(mode = dict(type='low'), lut_dim = 32, k_size=3, w_lut=True)    
@@ -642,9 +659,10 @@ class Dark_ResNet(BaseModule):
             x_g, mat = color_transform(x_i, mat, dmat=dmat)
             x_g = x_g.clip(0, 1)
             x_l = self.nonlinear(x_g)
-            if self.training: 
+            if self.training:
                 loss_mat = self.mat_loss2(x_i, x_l, mat)
-                 # loss_mat = self.mat_loss(x_i, x_l, mat)
+                if self.use_grad_reg:
+                    loss_mat = loss_mat + self.lambda_grad * self.grad_consistency_loss(x_g, x_l)
             else:
                 loss_mat = torch.zeros_like(x_l)
             # loss_mat = torch.zeros_like(x_l)  # For Inference
@@ -719,6 +737,36 @@ class Dark_ResNet(BaseModule):
         loss_mat = (1 - similarity).sum(dim=-1).mean()
 
         return loss_mat * 0.05
+
+    def grad_consistency_loss(self, x_g, x_l, tau=0.02, eps=1e-8):
+        """
+        Gradient direction consistency between ISP input (x_g) and output (x_l).
+
+        Penalises pixels where the spatial gradient *direction* deviates after
+        tone mapping, but does NOT penalise magnitude changes (which are the
+        intended effect of the polynomial expansion).
+
+        Only edge pixels (||grad_x_g|| > tau) are considered; flat regions
+        are exempt because their gradient directions are noise-dominated.
+        """
+        gx_g = F.conv2d(x_g, self._sobel_x, padding=1, groups=3)
+        gy_g = F.conv2d(x_g, self._sobel_y, padding=1, groups=3)
+        gx_l = F.conv2d(x_l, self._sobel_x, padding=1, groups=3)
+        gy_l = F.conv2d(x_l, self._sobel_y, padding=1, groups=3)
+
+        mag_g = torch.sqrt(gx_g ** 2 + gy_g ** 2)
+        mask = (mag_g > tau).float()
+
+        dot = gx_g * gx_l + gy_g * gy_l
+        norm_g = torch.sqrt(gx_g ** 2 + gy_g ** 2) + eps
+        norm_l = torch.sqrt(gx_l ** 2 + gy_l ** 2) + eps
+        cos_sim = dot / (norm_g * norm_l)
+
+        loss_per_pixel = 1.0 - cos_sim
+        masked_sum = (loss_per_pixel * mask).sum()
+        mask_sum = mask.sum() + eps
+
+        return masked_sum / mask_sum
 
     def mat_loss(self, x_i, x_l, P):
         b, c, h, w = x_i.shape
