@@ -738,16 +738,15 @@ class Dark_ResNet(BaseModule):
 
         return loss_mat * 0.05
 
-    def grad_consistency_loss(self, x_g, x_l, tau=0.02, eps=1e-8):
+    def grad_consistency_loss(self, x_g, x_l, k=2.0, eps=1e-8):
         """
         Gradient direction consistency between ISP input (x_g) and output (x_l).
 
         Penalises pixels where the spatial gradient *direction* deviates after
-        tone mapping, but does NOT penalise magnitude changes (which are the
-        intended effect of the polynomial expansion).
+        tone mapping, but does NOT penalise magnitude changes.
 
-        Only edge pixels (||grad_x_g|| > tau) are considered; flat regions
-        are exempt because their gradient directions are noise-dominated.
+        Edge mask: ||grad_x_g|| > mean(||grad||) + k * std(||grad||)
+        (adaptive, per-image, inspired by Canny's double-threshold convention).
         """
         gx_g = F.conv2d(x_g, self._sobel_x, padding=1, groups=3)
         gy_g = F.conv2d(x_g, self._sobel_y, padding=1, groups=3)
@@ -755,6 +754,7 @@ class Dark_ResNet(BaseModule):
         gy_l = F.conv2d(x_l, self._sobel_y, padding=1, groups=3)
 
         mag_g = torch.sqrt(gx_g ** 2 + gy_g ** 2)
+        tau = mag_g.mean() + k * mag_g.std()
         mask = (mag_g > tau).float()
 
         dot = gx_g * gx_l + gy_g * gy_l
