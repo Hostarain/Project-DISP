@@ -23,6 +23,7 @@ from .SID_resnet import SID_ResNet
 from .LIS_resnet import LIS_ResNet
 from .FeaEn_resnet import Fea_ResNet
 from .dark_resnet import Dark_ResNet
+from .darkisp_cspdarknet import DarkISP_CSPDarknet
 
 __all__ = [
     'RegNet', 'ResNet', 'ResNetV1d', 'ResNeXt', 'SSDVGG', 'HRNet',
@@ -30,4 +31,4 @@ __all__ = [
     'DetectoRS_ResNeXt', 'Darknet', 'ResNeSt', 'TridentResNet', 'CSPDarknet',
     'SwinTransformer', 'PyramidVisionTransformer',
     'PyramidVisionTransformerV2', 'EfficientNet', 'CSPNeXt', 'RAW_ResNet',
-    'LOD_ResNet', 'SID_ResNet', 'LIS_ResNet', 'Fea_ResNet', 'Dark_ResNet']
+    'LOD_ResNet', 'SID_ResNet', 'LIS_ResNet', 'Fea_ResNet', 'Dark_ResNet', 'DarkISP_CSPDarknet']
