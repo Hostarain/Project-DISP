@@ -47,7 +47,14 @@ class YOLOXModeSwitchHook(Hook):
             # The dataset pipeline cannot be updated when persistent_workers
             # is True, so we need to force the dataloader's multi-process
             # restart. This is a very hacky approach.
-            train_loader.dataset.update_skip_type_keys(self.skip_type_keys)
+            # Unwrap RepeatDataset/ConcatDataset wrappers
+            ds = train_loader.dataset
+            if hasattr(ds, 'dataset'):
+                ds = ds.dataset
+            if hasattr(ds, 'datasets'):
+                ds = ds.datasets[0]
+            if hasattr(ds, 'update_skip_type_keys'):
+                ds.update_skip_type_keys(self.skip_type_keys)
             if hasattr(train_loader, 'persistent_workers'
                        ) and train_loader.persistent_workers is True:
                 train_loader._DataLoader__initialized = False
