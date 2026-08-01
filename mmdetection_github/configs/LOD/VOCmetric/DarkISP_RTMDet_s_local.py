@@ -13,7 +13,8 @@ model = dict(
         mean=None, std=None, bgr_to_rgb=False, pad_size_divisor=32),
     backbone=dict(
         type='DarkISP_CSPNeXt',
-        ISP_version='v2',
+        ISP_version='v2',       # 原始 Dark-ISP, 无 GGNC
+        use_grad_guide=False,  # 显式关闭 GGNC 梯度引导
         arch='P5',
         deepen_factor=0.33,
         widen_factor=0.5,
