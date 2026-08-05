@@ -68,14 +68,14 @@ data_root = '/path/to/LOD/dataset'
 backend_args = None
 
 train_pipeline = [
-    dict(type='LoadRAWImageFromFile', backend_args=backend_args),
+    dict(type='LoadRAWImageFromFile', backend_args=backend_args, postfix='npz'),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='Resize', scale=(672, 416), keep_ratio=True),
     dict(type='RandomFlip', prob=0.5),
     dict(type='PackDetInputs', meta_keys=('img_id','img_path','ori_shape','img_shape','scale_factor','flip','flip_direction','gt','iso','wb','white_level','black_level','ccm','raw_pattern','exp_time','ratio')),
 ]
 test_pipeline = [
-    dict(type='LoadRAWImageFromFile', backend_args=backend_args),
+    dict(type='LoadRAWImageFromFile', backend_args=backend_args, postfix='npz'),
     dict(type='Resize', scale=(672, 416), keep_ratio=True),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='PackDetInputs', meta_keys=('img_id','img_path','ori_shape','img_shape','scale_factor','iso','wb','white_level','ratio','black_level','ccm','raw_pattern','exp_time')),
