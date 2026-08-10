@@ -23,9 +23,8 @@ model = dict(
         norm_cfg=dict(type='BN', momentum=0.03, eps=0.001),
         act_cfg=dict(type='SiLU', inplace=True),
         cspnext_init_cfg=dict(
-            type='Kaiming', layer='Conv2d', a=2.236,
-            distribution='uniform', mode='fan_in',
-            nonlinearity='leaky_relu'),
+            type='Pretrained',
+            checkpoint='checkpoints/cspnext_x_coco.pth'),
     ),
     neck=dict(
         type='CSPNeXtPAFPN',
