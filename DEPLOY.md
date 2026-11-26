@@ -68,6 +68,7 @@ python test_dataset.py
 conda activate dark-isp
 cd mmdetection_github
 python tools/train.py configs/LOD/VOCmetric/R_Net_denoise_50.py --work-dir work_dirs/my_train
+
 $env:CUDA_LAUNCH_BLOCKING="1" ; python tools/train.py configs/LOD/VOCmetric/R_Net_denoise_50.py --work-dir work_dirs/my_train
 python tools/train.py configs/LOD/VOCmetric/R_Net_DarkISP_18.py --work-dir work_dirs/2026_06_04_DarkISP_ResNet18 --resume checkpoints/2026_06_03_DarkISP_ResNet18/epoch_3.pth
 从断点接着跑：--resume checkpoints/my_train/epoch_1.pth
@@ -97,4 +98,44 @@ python plot_loss.py mmdetection_github/work_dirs/mytrain
 自动找最新时间戳 → 读 scalars.json → 画出 loss + mAP，存为 training_curves.png。
 所以原则上确保每次执行，都更新work_dirs的名字
 ---
+
+## 8. 常见报错
+
+### 8.1 `UnicodeDecodeError: 'gbk' codec can't decode ... cl.exe`
+
+出现在 `mmengine/utils/dl_utils/collect_env.py:141`。中文 Windows 下 `cl.exe` 的输出不是本地
+编码，mmengine 收集环境信息时解码失败直接把训练打断。
+
+* 已在 `mmengine-0.10.5` 源码里加 fallback（`utf-8, errors='replace'`），正常情况不会再报。
+* 若换了别的环境版本，可临时规避：`set PYTHONUTF8=1` 后再启动训练。
+
+### 8.2 `FileNotFoundError: ...\RAW-dark-Annotations\2.xml`
+
+说明跑的是**旧配置**（`R_Net_defaultISP_18/50.py`、`R_Net_demosaic_18/50.py`、`R_Net_enhance_*`、
+`R_Net_LIS_*`、`R_Net_raw_adapter_*`、`SpRCNN_*`）。这批配置依赖**原版预渲染图片目录**
+（`RGB_dark/`、`RAW_dark/`、`RAW-dark-Annotations/`），本地数据集只有：
+
+```
+dataset/RAWTest/
+├── RAW_dark_npz/          # npz 原始数据
+├── RGB-dark-Annotations/  # xml 标注
+└── trainval/              # train.txt / val.txt
+```
+
+**本地可用的 ISP 对照配置**（都走 npz 管线，只有 `ISP_version` 不同）：
+
+| 配置 | ISP | 说明 |
+|---|---|---|
+| `R_Net_DarkISP_18.py` | v2 | Dark-ISP 基线（61.90） |
+| `R_Net_defaultISP_v0_18.py` | v0 | 传统 ISP 基线（D5 用这个） |
+| `R_Net_demosaic_v1_18.py` | v1 | 仅去马赛克 |
+
+> ⚠ 自动补全的坑：输入 `R_Net_defaultISP_<Tab>` 时，`R_Net_defaultISP_18.py`（旧，不可用）会排在
+> `R_Net_defaultISP_v0_18.py`（新，可用）前面，务必打全名。
+
+```bash
+cd mmdetection_github
+set PYTHONUTF8=1
+python tools/train.py configs/LOD/VOCmetric/R_Net_defaultISP_v0_18.py --work-dir work_dirs/R_Net_defaultISP_v0_18
+```
 

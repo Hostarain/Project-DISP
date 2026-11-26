@@ -33,3 +33,19 @@ page_*.txt
 # Work/output directories
 work_dirs/
 vis_output/
+
+# 大体积二进制与打包产物（不入库）
+*.rar
+*.zip
+nul
+outputs/
+.dl-agent-logs/
+vis_compare/
+vis_darkisp_output/
+vis_fullpipeline/
+vis_isp_output/
+
+# 服务器打包目录（内含预训练权重，单份 180MB+）
+mmdetection_github/server_package/
+mmdetection_github/server_incremental/
+mmdetection_github/updates_20250709/

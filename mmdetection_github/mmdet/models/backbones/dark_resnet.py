@@ -368,7 +368,8 @@ class Dark_ResNet(BaseModule):
                  use_grad_guide = False,
                  grad_guide_mode = 'v1',
                  use_grad_reg = False,
-                 lambda_grad = 0.1):
+                 lambda_grad = 0.1,
+                 grad_mask = 'edge'):
         super(Dark_ResNet, self).__init__(init_cfg)
         self.zero_init_residual = zero_init_residual
         if depth not in self.arch_settings:
@@ -446,6 +447,7 @@ class Dark_ResNet(BaseModule):
 
         self.use_grad_reg = use_grad_reg
         self.lambda_grad = lambda_grad
+        self.grad_mask = grad_mask  # 'edge'（旧：仅强梯度）/ 'full'（新：全图）
         # Pre-create Sobel kernels for grad_consistency_loss (frozen, no grad)
         if use_grad_reg:
             sx = torch.tensor([[-1.,  0.,  1.],
@@ -716,8 +718,11 @@ class Dark_ResNet(BaseModule):
         result1 = torch.bmm(x_l, x_iT)  # Shape: [4, 3, 4]
         result2 = torch.bmm(x_i, x_iT)  # Shape: [4, 4, 4]
         det = torch.linalg.det(result2) # Determinant
-        if torch.any(det == 0):
-            raise ValueError("Has zeor determinant")
+        # 暗图颜色方差很小，协方差矩阵可能接近奇异；直接求逆会产生 inf，
+        # 随后整个训练变成 NaN（2026-10-30 那次第 10 轮崩溃即此类）。
+        # 该项只是正则，遇到病态批次直接跳过，不影响主检测损失。
+        if torch.any(det.abs() < 1e-8):
+            return torch.zeros((), device=x_i.device, dtype=x_i.dtype)
         result2 = torch.linalg.inv(result2)
         A = torch.bmm(result1, result2)
         P = torch.mean(P, dim=(1, 2))
@@ -735,38 +740,68 @@ class Dark_ResNet(BaseModule):
         # Calculate coscine similarity
         similarity = dot_product / (norm1 * norm2)
         loss_mat = (1 - similarity).sum(dim=-1).mean()
+        if not torch.isfinite(loss_mat):
+            return torch.zeros((), device=x_i.device, dtype=x_i.dtype)
 
         return loss_mat * 0.05
 
-    def grad_consistency_loss(self, x_g, x_l, k=2.0, eps=1e-8):
+    def grad_consistency_loss(self, x_g, x_l, k=2.0, eps=1e-8, min_mag=1e-4):
         """
         Gradient direction consistency between ISP input (x_g) and output (x_l).
 
         Penalises pixels where the spatial gradient *direction* deviates after
         tone mapping, but does NOT penalise magnitude changes.
 
-        Edge mask: ||grad_x_g|| > mean(||grad||) + k * std(||grad||)
-        (adaptive, per-image, inspired by Canny's double-threshold convention).
+        掩码口径由 `grad_mask` 决定（三档，均为实测调整）：
+
+        * ``'edge'``（旧）: ||grad_x_g|| > mean + k*std，只统计强梯度像素（约 3.7%）。
+          实测：该处的方向偏差仅 0.0017（cos≈0.998），正则无作用对象，
+          loss ≈ 0.002 且几乎恒定。
+
+        * ``'full'``: 全图有效像素（仅 min_mag 作数值下限）。
+          实测：弱梯度区的均值升到 0.0568，但**中位数只有 0.0008、p99=1.0**，
+          且误差与 log 幅值相关系数为 -0.82——说明该区域的"偏差"主要是
+          **近零梯度向量之间无意义的夹角**，不是真实的结构失真。
+          以这个口径训练，监督信号被噪声尾巴主导，故效果一般。
+
+        * ``'weighted'``（推荐）: 按参考梯度幅值加权
+          ``L = Σ (1-cos)·||∇x_g|| / Σ ||∇x_g||``。
+          弱尾的幅值趋零、权重自动消失；中段（50~90% 分位，占约一半梯度能量、
+          且承载主要真实失真）自动成为主导。无需人工阈值。
+
+        数值注意：eps 必须写在**根号内**（``sqrt(gx²+gy²+1e-12)``）。
+        若只在根号外加下限或对结果做 clamp，前向虽然正常，但 sqrt 在 0 处的
+        反向仍是 1/0；配合梯度裁剪（total_norm=inf → scale=0）会得到
+        ``inf*0=NaN``，一步之内把所有参数打成 NaN。
         """
         gx_g = F.conv2d(x_g, self._sobel_x, padding=1, groups=3)
         gy_g = F.conv2d(x_g, self._sobel_y, padding=1, groups=3)
         gx_l = F.conv2d(x_l, self._sobel_x, padding=1, groups=3)
         gy_l = F.conv2d(x_l, self._sobel_y, padding=1, groups=3)
 
-        mag_g = torch.sqrt(gx_g ** 2 + gy_g ** 2)
-        tau = mag_g.mean() + k * mag_g.std()
-        mask = (mag_g > tau).float()
+        mode = getattr(self, 'grad_mask', 'edge')
+        mag_g = torch.sqrt(gx_g ** 2 + gy_g ** 2 + 1e-12)
+        mag_l = torch.sqrt(gx_l ** 2 + gy_l ** 2 + 1e-12)
+
+        if mode == 'weighted':
+            weight = (mag_g > min_mag).float() * mag_g
+        elif mode == 'full':
+            weight = (mag_g > min_mag).float()
+        else:  # 'edge'
+            tau = mag_g.mean() + k * mag_g.std()
+            weight = (mag_g > tau).float()
 
         dot = gx_g * gx_l + gy_g * gy_l
-        norm_g = torch.sqrt(gx_g ** 2 + gy_g ** 2) + eps
-        norm_l = torch.sqrt(gx_l ** 2 + gy_l ** 2) + eps
-        cos_sim = dot / (norm_g * norm_l)
+        cos_sim = (dot / (mag_g * mag_l)).clamp(-1.0, 1.0)
 
         loss_per_pixel = 1.0 - cos_sim
-        masked_sum = (loss_per_pixel * mask).sum()
-        mask_sum = mask.sum() + eps
+        weighted_sum = (loss_per_pixel * weight).sum()
+        weight_sum = weight.sum() + eps
 
-        return masked_sum / mask_sum
+        loss = weighted_sum / weight_sum
+        if not torch.isfinite(loss):
+            return torch.zeros((), device=x_g.device, dtype=x_g.dtype)
+        return loss
 
     def mat_loss(self, x_i, x_l, P):
         b, c, h, w = x_i.shape

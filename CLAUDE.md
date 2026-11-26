@@ -198,7 +198,7 @@ Removed all failed/irrelevant experiments to focus on Nonlinear GGNC:
 - **Deleted configs**: `R_Net_GGNC_both`, `R_Net_GGNC_linear`, `R_Net_GGNC_LSA*`, `R_Net_LSA`, `R_Net_Structure`, `R_Net_Naive`
 - **Deleted modules**: `structure_aware.py`, `learned_structure_attention.py`
 - **Cleaned code**: removed `use_grad_guide_linear`, LSA/Structure/Naive model branches from `dark_resnet.py`; reverted `Matrix_Predictor`
-- **Kept configs**: `R_Net_DarkISP_18.py` (baseline), `R_Net_GGNC_nonlinear_18.py`
+- **Kept configs**: `R_Net_DarkISP_18.py` (baseline), `R_Net_GGNC_v1_18.py` (原 `R_Net_GGNC_nonlinear_18.py`)
 - **Kept results**: `work_dirs/2026_06_04_DarkISP_ResNet18` (61.90%), `work_dirs/R_Net_GGNC_18` (65.27%)
 
 ### Current GGNC Architecture (Nonlinear only)
@@ -216,7 +216,7 @@ RAW (B,4,H,W)
         └─ e_conv5 → 24 coeffs → Tayler_res → x_l
 ```
 
-Current design is minimal: fixed 2-direction Sobel kernels, single injection point, no attention.
+Current design is minimal: 2-direction differential kernels (learnable, Sobel-initialised), single injection point, no attention.
 
 ---
 
@@ -267,3 +267,13 @@ Upgrade from fixed 2-kernel Sobel to a richer structural response operator **ins
 - Branch: `main`
 - SSH config at `~/.ssh/config`
 - Conda env: `dark-isp` (CUDA_LAUNCH_BLOCKING=1 auto-set via `etc/conda/activate.d/env_vars.bat`)
+
+---
+
+## Session Memory
+
+@AGENTS.md
+
+> **状态记忆全部在 `AGENTS.md`**：当前阶段、实验事实、决策与待定项。本文件只保留稳定的工程说明（架构、命令、论文概念），避免两份状态互相打架。
+> 上面这行 `@AGENTS.md` 是给 Claude Code 的导入；DSH 不解析 `@`，它直接按 `AGENTS.md` 这个文件名自动加载。
+> 详细论证评估见 `论文论证框架评估.md`，论文目录见 `论文目录_定稿.md`。原 `MEMORY.md` 已并入 `AGENTS.md`，仅剩指针。

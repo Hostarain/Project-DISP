@@ -101,7 +101,7 @@ train_pipeline = [
 ]
 
 test_pipeline = [
-    dict(type='LoadRAWImageFromFile', backend_args=backend_args),
+    dict(type='LoadRAWImageFromFile', backend_args=backend_args, postfix='npz'),
     dict(type='Resize', scale=(667, 400), keep_ratio=True),
     # If you don't have a gt annotation, delete the pipeline
     dict(type='LoadAnnotations', with_bbox=True),

@@ -138,7 +138,14 @@ def collect_env():
                 f'{ccompiler.cc}', stderr=subprocess.STDOUT, shell=True)
             encoding = os.device_encoding(
                 sys.stdout.fileno()) or locale.getpreferredencoding()
-            env_info['MSVC'] = cc.decode(encoding).partition('\n')[0].strip()
+            try:
+                env_info['MSVC'] = cc.decode(encoding).partition(
+                    '\n')[0].strip()
+            except (UnicodeDecodeError, LookupError):
+                # 中文 Windows 下 cl.exe 的输出不一定是本地编码，
+                # 若此处抛异常会直接中断训练（mmengine 已知问题）。
+                env_info['MSVC'] = cc.decode(
+                    'utf-8', errors='replace').partition('\n')[0].strip()
             env_info['GCC'] = 'n/a'
     except (subprocess.CalledProcessError, errors.DistutilsPlatformError):
         env_info['GCC'] = 'n/a'
